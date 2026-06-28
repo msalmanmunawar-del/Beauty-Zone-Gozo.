@@ -1,0 +1,56 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          # Scans and adds the Hostinger server fingerprint to prevent SSH warnings
+          ssh-keyscan -p ${{ secrets.HOSTINGER_PORT || 22 }} ${{ secrets.HOSTINGER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Hostinger via Rsync
+        run: |
+          # SSH connection details from GitHub Secrets
+          HOST="${{ secrets.HOSTINGER_HOST }}"
+          USER="${{ secrets.HOSTINGER_USER }}"
+          PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
+          
+          # Use default 'public_html/' path or let user define a custom target directory
+          DEST_DIR="${{ secrets.HOSTINGER_TARGET_DIR || 'public_html/' }}"
+          
+          echo "Deploying build artifacts from 'dist/' directory to ${USER}@${HOST}:${DEST_DIR} on port ${PORT}..."
+          
+          # Deploy using rsync
+          # -a: archive mode (preserves permissions, timestamps, symlinks, etc.)
+          # -v: verbose output
+          # -z: compress file data during transfer
+          # --delete: delete extraneous files from destination dirs (forces clean sync)
+          rsync -avz -e "ssh -p ${PORT} -i ~/.ssh/id_rsa" --delete dist/ ${USER}@${HOST}:${DEST_DIR}
+          
+          echo "Deployment completed successfully!"
