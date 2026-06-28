@@ -1,84 +1,62 @@
-# Hostinger CI/CD Deployment Guide (GitHub Actions)
+# Hostinger Node.js GitHub Deployment Guide
 
-This guide outlines how to set up automatic deployment for your React application to Hostinger using GitHub Actions. Once configured, every push to your `main` (or `master`) branch will automatically build and deploy your application.
+This guide details how to deploy this React + Express application as a **Node.js Web Application** directly from GitHub to Hostinger.
 
----
-
-## How Automatic Deployments Work
-
-1. **Push Code**: You push code changes to your GitHub repository on the `main` or `master` branch.
-2. **GitHub Actions Trigger**: GitHub automatically spins up a secure runner environment (Ubuntu).
-3. **Build Stage**: The runner checks out your code, installs Node.js 20, installs dependencies with `npm ci`, and builds your production assets using `npm run build` to generate the `dist/` directory.
-4. **Deploy Stage (Rsync over SSH)**: The runner uses standard, secure `rsync` over SSH to upload only the compiled `dist/` folder contents into your Hostinger target folder (e.g., `public_html/`). Any files on Hostinger that are not in the new build will be pruned automatically to ensure a clean, modern release.
+Unlike static websites, a Node.js application runs a persistent Express server that handles compression, security headers, smart static caching, and seamless Single-Page Application (SPA) fallback routing.
 
 ---
 
-## Step 1: Enable SSH Access in Hostinger
+## Why this Structure is Fully Compatible with Hostinger
 
-To allow GitHub Actions to securely copy files to your server, you must enable SSH access.
+1. **Explicit Entry Point**: `package.json` specifies `"main": "server.js"`, which Hostinger reads to know how to start the app.
+2. **Start Script**: The standard `"start": "node server.js"` script boots the production-ready Express server.
+3. **Automatic Frontend Compilation**: The `"postinstall": "npm run build"` script ensures that when Hostinger runs `npm install` during deployment, the Vite + React frontend is automatically built into the `dist/` directory on the server. No manual builds are needed!
+4. **Environment Port Binding**: The server dynamically listens to `process.env.PORT`, which is required for Hostinger to map your domain traffic to the correct container port.
+
+---
+
+## Step-by-Step Deployment Guide
+
+### Step 1: Push your Code to GitHub
+Ensure all your files are pushed to a public or private GitHub repository (e.g., `main` branch).
+```bash
+git add .
+git commit -m "Configure production Express server and automatic Node.js build"
+git push origin main
+```
+
+### Step 2: Configure Node.js Application in Hostinger hPanel
 
 1. Log in to your **Hostinger hPanel**.
-2. Go to **Websites** -> click **Manage** on your website.
-3. In the left sidebar, search for or click on **Advanced** -> **SSH Access**.
-4. Set the **SSH Status** to **Enabled**.
-5. Note the following credentials displayed on the screen:
-   * **SSH IP (Host)**
-   * **SSH Username (User)**
-   * **SSH Port** (usually `22`, but verify on your page)
+2. Navigate to **Websites** -> click **Manage** next to your domain.
+3. Search for or select **Node.js** in the left sidebar menu (usually under **Advanced** or **Hosting**).
+4. Click **Create Application** (or manage your existing Node.js app).
+5. Configure the following application settings:
+   * **Node.js Version**: Select **20.x** (or greater).
+   * **Application Directory**: Choose the root directory where your GitHub repository is cloned (e.g., `public_html/` or a custom subfolder).
+   * **Application Domain**: Select your domain.
+   * **Startup File**: Enter `server.js`.
+   * **Environment Variables**: Add any custom variables if required (your app runs perfectly out-of-the-box using the defaults).
+
+### Step 3: Link your GitHub Repository to Hostinger
+
+1. In your Hostinger panel, go to the **Git** section.
+2. Enter your GitHub Repository URL (SSH or HTTPS).
+3. Set the branch name to `main` (or your preferred deployment branch).
+4. Click **Create** or **Connect**.
+5. Once connected, click **Deploy** (or enable **Automatic Deployment** using the Webhook URL provided by Hostinger on your GitHub repository settings under Webhooks).
+
+### Step 4: Install Dependencies & Build
+1. In your Hostinger Node.js app dashboard, click **Run npm install** (or let Hostinger run it automatically).
+2. **That's it!** The `npm install` command triggers our configured `"postinstall": "npm run build"` script, compiling your Vite frontend automatically.
+3. Once completed, click **Start/Restart Application** in the Hostinger panel.
+4. Your high-performance, fully secure React + Express website is now live!
 
 ---
 
-## Step 2: Generate an SSH Key Pair
+## Features Enabled on Hostinger Production Server
 
-You need a secure key pair to allow GitHub Actions to authenticate with Hostinger without using a password.
-
-### Option A: Generate locally (Recommended)
-1. Open your terminal (macOS/Linux) or Git Bash (Windows) and run:
-   ```bash
-   ssh-keygen -t rsa -b 4096 -f id_rsa_hostinger -N ""
-   ```
-2. This creates two files:
-   * `id_rsa_hostinger` (Private Key - keep this secret!)
-   * `id_rsa_hostinger.pub` (Public Key)
-
-### Option B: Generate in Hostinger hPanel
-If Hostinger provides an option to generate or manage keys directly in the panel, you can use that.
-
-### Add the Public Key to Hostinger
-1. Open the public key file (`id_rsa_hostinger.pub`) and copy its entire text.
-2. In your Hostinger hPanel, under **SSH Access**, look for the **SSH Keys** section.
-3. Click **Add Key**, enter a name (e.g., "github-actions"), and paste the public key. Click **Add**.
-
----
-
-## Step 3: Add GitHub Secrets to your Repository
-
-To keep your server credentials secure, add them as repository secrets in GitHub.
-
-1. Go to your repository on **GitHub**.
-2. Click **Settings** (the gear icon on the top tab).
-3. In the left sidebar, expand **Security** -> click **Secrets and variables** -> **Actions**.
-4. Click **New repository secret** for each of the following:
-
-| Secret Name | Value Example | Description |
-| :--- | :--- | :--- |
-| **`HOSTINGER_HOST`** | `185.224.138.54` | Your Hostinger SSH IP address |
-| **`HOSTINGER_USER`** | `u123456789` | Your Hostinger SSH Username |
-| **`HOSTINGER_PORT`** | `22` | Your Hostinger SSH Port (defaults to 22 if omitted) |
-| **`HOSTINGER_SSH_KEY`** | `-----BEGIN RSA PRIVATE KEY----- ...` | The complete contents of your private key file (`id_rsa_hostinger`) |
-| **`HOSTINGER_TARGET_DIR`** | `domains/yourdomain.com/public_html/` | *(Optional)* The path to your public folder. Defaults to `public_html/` |
-
----
-
-## Step 4: Verify and Run!
-
-You are now fully set up! 
-
-1. Ensure your `.github/workflows/deploy.yml` file is added and committed to your repository.
-2. Push your changes to GitHub:
-   ```bash
-   git add .
-   git commit -m "Configure GitHub Actions CI/CD for Hostinger"
-   git push origin main
-   ```
-3. Navigate to the **Actions** tab in your GitHub repository to watch your live build and deployment pipeline succeed!
+* **SPA Fallback Routing**: Ensures page refreshes work perfectly on client-side routes (e.g., `/services`, `/faq`).
+* **Performance Compression**: All static text assets (HTML, JS, CSS) are compressed on-the-fly via gzip.
+* **Smart Browser Caching**: Static assets in `assets/` are cached for 1 year (`immutable`), while HTML files are delivered live to guarantee immediate updates.
+* **Helmet Security**: Configured to secure the application without blocking React components or assets from loading.

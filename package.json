@@ -12,6 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js",
+    "postinstall": "npm run build",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
